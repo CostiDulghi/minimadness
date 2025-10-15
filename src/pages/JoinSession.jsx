@@ -92,11 +92,12 @@ export default function JoinSession() {
       <h1 className="text-4xl font-bold text-primary mb-8">Join MiniMadness 🕹️</h1>
 
       <input
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder="Enter your name"
-        className="border-2 border-gray-300 rounded-lg p-3 text-lg text-center mb-4"
-      />
+  value={name}
+  onChange={(e) => setName(e.target.value)}
+  placeholder="Enter your name"
+  className="border-2 border-gray-300 rounded-lg p-3 text-lg text-center mb-4 bg-white text-black focus:outline-none focus:ring-2 focus:ring-pink-500"
+/>
+
 
       <button
         onClick={joinSession}
