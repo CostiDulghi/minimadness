@@ -49,28 +49,23 @@ export default function HostSession() {
 
   // ascultă jucători în timp real
   useEffect(() => {
-    if (!sessionCode) return;
+  const channel = supabase
+    .channel("players-channel")
+    .on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "players" },
+      (payload) => {
+        console.log("🧠 Player joined:", payload.new);
+        setPlayers((prev) => [...prev, payload.new]);
+      }
+    )
+    .subscribe();
 
-    const playerChannel = supabase
-      .channel("players-channel")
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "players",
-          filter: `session_code=eq.${sessionCode}`,
-        },
-        (payload) => {
-          setPlayers((prev) => [...prev, payload.new]);
-        }
-      )
-      .subscribe();
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}, []);
 
-    return () => {
-      supabase.removeChannel(playerChannel);
-    };
-  }, [sessionCode]);
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen">
