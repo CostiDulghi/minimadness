@@ -20,7 +20,6 @@ export default function JoinSession() {
   const glowRef = useRef();
   const titleRef = useRef();
 
-  // 🌈 Animations
   useEffect(() => {
     if (containerRef.current) {
       gsap.fromTo(
@@ -41,7 +40,6 @@ export default function JoinSession() {
     }
   }, [joined, status]);
 
-  // ✨ title pulse
   useEffect(() => {
     if (titleRef.current) {
       gsap.fromTo(
@@ -52,7 +50,7 @@ export default function JoinSession() {
     }
   }, []);
 
-  // 🧠 Realtime game status
+  // realtime status
   useEffect(() => {
     if (!code) return;
 
@@ -84,7 +82,7 @@ export default function JoinSession() {
     return () => supabase.removeChannel(gameChannel);
   }, [code]);
 
-  // 🧾 Fetch player’s last score after each result phase
+  // personal score after results
   useEffect(() => {
     if (status === "results" && joined) {
       (async () => {
@@ -101,7 +99,7 @@ export default function JoinSession() {
     }
   }, [status, joined, name, code]);
 
-  // 🟦🟥 join team
+  // join
   async function join(selectedTeam) {
     if (joined || loading) return;
     setLoading(true);
@@ -147,44 +145,28 @@ export default function JoinSession() {
     setLoading(false);
   }
 
-  // ⚡️ Status-based UI
-  if (status === "countdown") {
-    return <CountdownScreen onFinish={() => {}} />;
-  }
+  // status-based rendering
+  if (status === "countdown") return <CountdownScreen onFinish={() => {}} />;
 
-  if (status === "quiz") {
-    return (
-      <QuizGame
-        sessionCode={code}
-        playerName={name}
-        team={team}
-        onFinish={() => {}}
-      />
-    );
-  }
+  if (status === "quiz")
+    return <QuizGame sessionCode={code} playerName={name} team={team} onFinish={() => {}} />;
 
-  if (status === "results" && joined) {
+  if (status === "results" && joined)
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-[#0b0015] via-[#160028] to-[#0b0015] text-white text-center">
         <h2 className="text-4xl text-pink-400 font-extrabold mb-4">Results</h2>
         <p className="text-lg text-gray-300">
-          You scored <span className="text-pink-300 font-bold">{score}</span>{" "}
-          points this round!
+          You scored <span className="text-pink-300 font-bold">{score}</span> points this round!
         </p>
         <p className="mt-8 text-gray-400 animate-pulse">Next round starting...</p>
       </div>
     );
-  }
 
-  if (status === "pong") {
-    return <PongGame sessionCode={code} />;
-  }
+  if (status === "pong") return <PongGame sessionCode={code} />;
 
-  if (status === "calculating") {
-    return <WaitingScreen message="Calculating scores..." />;
-  }
+  if (status === "calculating") return <WaitingScreen message="Calculating scores..." />;
 
-  // 💫 Default Join Screen
+  // join screen
   return (
     <div
       ref={containerRef}
@@ -199,7 +181,7 @@ export default function JoinSession() {
         <div className="relative z-10 text-center">
           <h1
             ref={titleRef}
-            className="text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-pink-400 via-fuchsia-500 to-purple-500 mb-3 flex justify-center items-center gap-2"
+            className="text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-pink-400 via-fuchsia-500 to-purple-500 mb-3 flex justify-center items-center gap-2 drop-shadow-[0_0_20px_rgba(255,100,200,0.6)]"
           >
             Join <span className="text-white">MiniMadness</span>
             <Gamepad2 className="text-pink-400 w-8 h-8" />
@@ -227,13 +209,7 @@ export default function JoinSession() {
                   : "bg-gradient-to-br from-blue-600 to-blue-900 hover:scale-110 hover:shadow-blue-500/50"
               }`}
             >
-              {loading ? (
-                <Loader2 className="animate-spin inline w-5 h-5" />
-              ) : (
-                <>
-                  🟦 Join <span className="text-blue-200 ml-1">Blue Team</span>
-                </>
-              )}
+              {loading ? <Loader2 className="animate-spin inline w-5 h-5" /> : "🟦 Join Blue Team"}
             </button>
 
             <button
@@ -245,13 +221,7 @@ export default function JoinSession() {
                   : "bg-gradient-to-br from-red-600 to-pink-700 hover:scale-110 hover:shadow-pink-500/50"
               }`}
             >
-              {loading ? (
-                <Loader2 className="animate-spin inline w-5 h-5" />
-              ) : (
-                <>
-                  🟥 Join <span className="text-pink-200 ml-1">Red Team</span>
-                </>
-              )}
+              {loading ? <Loader2 className="animate-spin inline w-5 h-5" /> : "🟥 Join Red Team"}
             </button>
           </div>
 
@@ -261,12 +231,10 @@ export default function JoinSession() {
         </div>
       ) : (
         <div className="relative z-10 flex flex-col items-center text-center">
-          <h2 className="text-4xl font-bold text-pink-400 mb-3">
+          <h2 className="text-4xl font-bold text-pink-400 mb-3 drop-shadow-[0_0_20px_rgba(255,100,200,0.6)]">
             ✅ Joined!
           </h2>
-          <p className="mt-2 text-gray-300 text-lg">
-            Waiting for the game to start...
-          </p>
+          <p className="mt-2 text-gray-300 text-lg">Waiting for the game to start...</p>
 
           <div className="mt-6 text-lg">
             <p>

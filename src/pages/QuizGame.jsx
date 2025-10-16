@@ -1,4 +1,3 @@
-// src/pages/QuizGame.jsx
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "../supabaseClient";
 import { gamingQuestions } from "../data/questions";
@@ -18,10 +17,15 @@ export default function QuizGame({
   const [loading, setLoading] = useState(true);
   const finishedRef = useRef(false);
 
-  const questions = gamingQuestions.map((q) => ({ question: q.q, options: q.a, answer: q.c }));
+  const questions = gamingQuestions.map((q) => ({
+    question: q.q,
+    options: q.a,
+    answer: q.c,
+  }));
+
   const question = questions[index];
 
-  // Sync deadline & current question
+  // Sync from DB
   useEffect(() => {
     if (!sessionCode) return;
 
@@ -29,10 +33,15 @@ export default function QuizGame({
       .channel(`game-${sessionCode}`)
       .on(
         "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "game_state", filter: `session_code=eq.${sessionCode}` },
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "game_state",
+          filter: `session_code=eq.${sessionCode}`,
+        },
         (payload) => {
-          if (payload?.new?.question_deadline) setDeadline(payload.new.question_deadline);
-          if (typeof payload?.new?.current_question === "number") setIndex(payload.new.current_question);
+          if (payload.new.question_deadline) setDeadline(payload.new.question_deadline);
+          if (typeof payload.new.current_question === "number") setIndex(payload.new.current_question);
         }
       )
       .subscribe();
@@ -54,7 +63,7 @@ export default function QuizGame({
     return () => supabase.removeChannel(channel);
   }, [sessionCode]);
 
-  // Countdown to finish
+  // Timer
   useEffect(() => {
     if (!deadline) return;
     finishedRef.current = false;
@@ -68,9 +77,9 @@ export default function QuizGame({
         clearInterval(interval);
 
         if (!isBroadcast) {
-          handleAnswer(null, true); // auto submit timeout
+          handleAnswer(null, true);
         } else {
-          onFinish?.(); // broadcast moves to results
+          onFinish?.();
         }
       }
     }, 250);
@@ -78,6 +87,7 @@ export default function QuizGame({
     return () => clearInterval(interval);
   }, [deadline, isBroadcast]);
 
+  // Save answer for player
   async function handleAnswer(option, auto = false) {
     if (isLocked || isBroadcast) return;
     setIsLocked(true);
@@ -99,26 +109,32 @@ export default function QuizGame({
     }]);
 
     if (!auto) {
-      setTimeout(() => onFinish?.(), 300); // player transitions; broadcast still controls DB status
+      setTimeout(() => {
+        onFinish?.(); // players switch to waiting/results screen; Broadcast flips the DB status
+      }, 300);
     }
   }
 
-  if (loading || !question) {
+  if (loading || !question)
     return (
       <div className="flex items-center justify-center min-h-screen bg-[#0b0015] text-white">
         <p className="text-lg">Loading question...</p>
       </div>
     );
-  }
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-[#0b0015] via-[#160028] to-[#0b0015] text-white text-center">
       <h2 className="text-3xl text-pink-400 mb-6">{question.question}</h2>
 
       <div className="relative w-64 h-3 bg-gray-700 rounded-full overflow-hidden mb-8">
-        <div className="absolute left-0 top-0 h-full bg-pink-500 transition-all duration-250" style={{ width: `${(timeLeft / 10) * 100}%` }} />
+        <div
+          className="absolute left-0 top-0 h-full bg-pink-500 transition-all duration-250"
+          style={{ width: `${(timeLeft / 10) * 100}%` }}
+        ></div>
       </div>
-      <p className="text-gray-400 mb-4 text-sm">Time left: <span className="text-pink-300 font-semibold">{timeLeft}s</span></p>
+      <p className="text-gray-400 mb-4 text-sm">
+        Time left: <span className="text-pink-300 font-semibold">{timeLeft}s</span>
+      </p>
 
       <div className="grid grid-cols-2 gap-4 w-[70%] max-w-2xl">
         {question.options.map((opt) => (
@@ -127,7 +143,11 @@ export default function QuizGame({
             disabled={isLocked || isBroadcast}
             onClick={() => handleAnswer(opt)}
             className={`px-6 py-4 rounded-xl text-lg font-semibold transition-all duration-300 ${
-              selected === opt ? (opt === question.answer ? "bg-green-500 scale-105" : "bg-red-500 scale-95") : "bg-purple-700 hover:bg-purple-600"
+              selected === opt
+                ? opt === question.answer
+                  ? "bg-green-500 scale-105"
+                  : "bg-red-500 scale-95"
+                : "bg-purple-700 hover:bg-purple-600"
             }`}
           >
             {opt}
@@ -135,7 +155,9 @@ export default function QuizGame({
         ))}
       </div>
 
-      <p className="mt-6 text-gray-400 text-sm">Question {index + 1} of {questions.length}</p>
+      <p className="mt-6 text-gray-400 text-sm">
+        Question {index + 1} of {questions.length}
+      </p>
     </div>
   );
 }

@@ -1,4 +1,3 @@
-// src/pages/BroadcastView.jsx
 import { useEffect, useState, useRef } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "../supabaseClient";
@@ -23,10 +22,14 @@ export default function BroadcastView() {
 
   useEffect(() => {
     if (!containerRef.current) return;
-    gsap.fromTo(containerRef.current, { opacity: 0, scale: 1.05 }, { opacity: 1, scale: 1, duration: 0.7, ease: "power3.out" });
+    gsap.fromTo(
+      containerRef.current,
+      { opacity: 0, scale: 1.05 },
+      { opacity: 1, scale: 1, duration: 0.7, ease: "power3.out" }
+    );
   }, [status]);
 
-  // realtime game_state
+  // Realtime game_state
   useEffect(() => {
     if (!code) return;
 
@@ -35,13 +38,13 @@ export default function BroadcastView() {
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "game_state", filter: `session_code=eq.${code}` },
-        async (payload) => {
+        (payload) => {
           const s = payload.new;
           setStatus(s.status);
-          setCurrentQuestion(s.current_question || 0);
-          setCorrectAnswer(s.correct_answer || null);
-          setBlueScore(s.blue_score || 0);
-          setRedScore(s.red_score || 0);
+          setCurrentQuestion(s.current_question ?? 0);
+          setCorrectAnswer(s.correct_answer ?? null);
+          setBlueScore(s.blue_score ?? 0);
+          setRedScore(s.red_score ?? 0);
         }
       )
       .subscribe();
@@ -50,10 +53,10 @@ export default function BroadcastView() {
       const { data: state } = await supabase.from("game_state").select("*").eq("session_code", code).single();
       if (state) {
         setStatus(state.status);
-        setCurrentQuestion(state.current_question || 0);
-        setCorrectAnswer(state.correct_answer || null);
-        setBlueScore(state.blue_score || 0);
-        setRedScore(state.red_score || 0);
+        setCurrentQuestion(state.current_question ?? 0);
+        setCorrectAnswer(state.correct_answer ?? null);
+        setBlueScore(state.blue_score ?? 0);
+        setRedScore(state.red_score ?? 0);
       }
       const { data: sess } = await supabase.from("sessions").select("*").eq("code", code).single();
       if (sess) setSessionInfo(sess);
@@ -62,7 +65,7 @@ export default function BroadcastView() {
     return () => supabase.removeChannel(channel);
   }, [code]);
 
-  // realtime players
+  // Realtime players
   useEffect(() => {
     if (!code) return;
     const channel = supabase
@@ -79,37 +82,30 @@ export default function BroadcastView() {
     return () => supabase.removeChannel(channel);
   }, [code]);
 
-  // ↪ countdown finished → start quiz (+ deadline)
+  // After countdown → set quiz + deadline (source of truth)
   async function startQuestion() {
-    const deadline = new Date(Date.now() + 10000).toISOString(); // 10s quiz
+    const deadline = new Date(Date.now() + 10000).toISOString(); // 10s
     await supabase
       .from("game_state")
       .update({ status: "quiz", question_deadline: deadline, correct_answer: null })
       .eq("session_code", code);
   }
 
-  // ↪ quiz finished → compute & show results
+  // After quiz → compute and show results
   async function showResults() {
     const { gamingQuestions } = await import("../data/questions");
     const q = gamingQuestions[currentQuestion];
     const correct = q.c;
 
-    // fetch answers for this question
     const { data: answers } = await supabase
       .from("answers")
       .select("*")
       .eq("session_code", code)
       .eq("question_index", currentQuestion);
 
-    // compute deltas
-    const blueDelta = (answers || [])
-      .filter((a) => a.team === "blue")
-      .reduce((s, a) => s + a.score, 0);
-    const redDelta = (answers || [])
-      .filter((a) => a.team === "red")
-      .reduce((s, a) => s + a.score, 0);
+    const blueDelta = (answers || []).filter(a => a.team === "blue").reduce((s, a) => s + a.score, 0);
+    const redDelta = (answers || []).filter(a => a.team === "red").reduce((s, a) => s + a.score, 0);
 
-    // get current totals
     const { data: state } = await supabase
       .from("game_state")
       .select("blue_score, red_score")
@@ -125,7 +121,7 @@ export default function BroadcastView() {
       .eq("session_code", code);
   }
 
-  // ↪ next question or pong
+  // Next question or Pong
   async function nextQuestion() {
     const { gamingQuestions } = await import("../data/questions");
     if (currentQuestion + 1 >= gamingQuestions.length) {
@@ -185,13 +181,13 @@ export default function BroadcastView() {
     return <PongGame sessionCode={code} />;
   }
 
-  // Waiting screen
+  // Waiting
   return (
     <div
       ref={containerRef}
       className="flex flex-col items-center justify-center min-h-screen text-white text-center relative overflow-hidden bg-gradient-to-br from-[#100018] via-[#0c0025] to-[#100018]"
     >
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,0,255,0.1),transparent_70%)] animate-pulse" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,0,255,0.1),transparent_70%)] animate-pulse"></div>
 
       <QRCodeCanvas value={`https://minimadness.vercel.app/join/${code}`} size={260} />
       <h1 className="mt-6 text-4xl font-extrabold text-pink-400">
