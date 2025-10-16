@@ -9,15 +9,62 @@ export default function JoinSession() {
   const [loading, setLoading] = useState(false);
 
   async function join(team) {
-    setLoading(true);
-    const { data: gs } = await supabase.from("game_state").select("join_locked").eq("session_code", code).single();
-    if (gs?.join_locked) return alert("Game already started!");
-    await supabase.from("players").insert([{ name, team, session_code: code }]);
-    localStorage.setItem("mm_name", name);
-    localStorage.setItem("mm_team", team);
+  setLoading(true);
+
+  console.log("🧠 Trying to join session:", code, "team:", team, "name:", name);
+
+  if (!name.trim()) {
+    alert("Please enter your name!");
     setLoading(false);
-    window.location.reload();
+    return;
   }
+
+  const { data: session, error: sessionError } = await supabase
+    .from("sessions")
+    .select("*")
+    .eq("code", code?.toUpperCase())
+    .single();
+
+  if (sessionError || !session) {
+    console.error("❌ Session not found:", sessionError);
+    alert("Session not found!");
+    setLoading(false);
+    return;
+  }
+
+  // verificăm dacă jocul e deja blocat
+  const { data: gs } = await supabase
+    .from("game_state")
+    .select("join_locked")
+    .eq("session_code", code)
+    .single();
+
+  if (gs?.join_locked) {
+    alert("❌ Game already started!");
+    setLoading(false);
+    return;
+  }
+
+  // încercăm să inserăm playerul
+  const { error } = await supabase
+    .from("players")
+    .insert([{ name, team, session_code: code.toUpperCase() }]);
+
+  if (error) {
+    console.error("❌ Error inserting player:", error);
+    alert("Could not join session!");
+    setLoading(false);
+    return;
+  }
+
+  console.log("✅ Joined session successfully!");
+  localStorage.setItem("mm_name", name);
+  localStorage.setItem("mm_team", team);
+
+  setLoading(false);
+  window.location.reload();
+}
+
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-[#12002e] via-[#0a001a] to-[#12002e] text-white relative overflow-hidden">
