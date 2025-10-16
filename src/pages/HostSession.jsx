@@ -8,25 +8,22 @@ export default function HostSession() {
   const [loading, setLoading] = useState(false);
   const [players, setPlayers] = useState([]);
   const [gameStarted, setGameStarted] = useState(false);
+  const [answers, setAnswers] = useState([]);
 
   async function createSession() {
     setLoading(true);
     const code = Math.random().toString(36).substring(2, 7).toUpperCase();
 
     const { error } = await supabase.from("sessions").insert([{ code }]);
-    setLoading(false);
-
-    if (error) {
+    if (!error) {
+      await supabase.from("game_state").insert([{ session_code: code, status: "waiting" }]);
+      setSessionCode(code);
+      setCreated(true);
+    } else {
       alert("Error creating session!");
       console.error(error);
-      return;
     }
-
-    // inițializează game_state
-    await supabase.from("game_state").insert([{ session_code: code, status: "waiting" }]);
-
-    setSessionCode(code);
-    setCreated(true);
+    setLoading(false);
   }
 
   async function startGame() {
@@ -49,23 +46,41 @@ export default function HostSession() {
 
   // ascultă jucători în timp real
   useEffect(() => {
-  const channel = supabase
-    .channel("players-channel")
-    .on(
-      "postgres_changes",
-      { event: "INSERT", schema: "public", table: "players" },
-      (payload) => {
-        console.log("🧠 Player joined:", payload.new);
-        setPlayers((prev) => [...prev, payload.new]);
-      }
-    )
-    .subscribe();
+    const channel = supabase
+      .channel("players-channel")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "players" },
+        (payload) => {
+          console.log("🧠 Player joined:", payload.new);
+          setPlayers((prev) => [...prev, payload.new]);
+        }
+      )
+      .subscribe();
 
-  return () => {
-    supabase.removeChannel(channel);
-  };
-}, []);
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
+  // ascultă răspunsurile jucătorilor
+  useEffect(() => {
+    const channel = supabase
+      .channel("answers-channel")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "answers" },
+        (payload) => {
+          console.log("🧾 New answer:", payload.new);
+          setAnswers((prev) => [...prev, payload.new]);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen">
@@ -116,9 +131,25 @@ export default function HostSession() {
           )}
 
           {gameStarted && (
-            <p className="mt-4 text-xl text-green-600 font-semibold">
-              ✅ Game Started! Waiting for players...
-            </p>
+            <>
+              <p className="mt-4 text-xl text-green-600 font-semibold">
+                ✅ Game Started! Waiting for players...
+              </p>
+              <div className="mt-6 text-center">
+                <h3 className="text-2xl font-bold mb-2 text-primary">Answers:</h3>
+                {answers.length === 0 ? (
+                  <p>No answers yet...</p>
+                ) : (
+                  <ul>
+                    {answers.map((a) => (
+                      <li key={a.id}>
+                        <b>{a.answer}</b> {a.is_correct ? "✅" : "❌"}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </>
           )}
         </>
       )}
