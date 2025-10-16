@@ -1,114 +1,123 @@
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useState } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import { supabase } from "../supabaseClient";
+import CountdownScreen from "./CountdownScreen";
+import PieTimer from "../components/PieTimer";
+import { gamingQuestions } from "../data/questions";
+import PongGame from "./PongGame";
+import ResultsScreen from "./ResultsScreen"
+
+const QUESTION_MS = 15000;
 
 export default function HostSession() {
+  const [phase, setPhase] = useState("lobby"); // lobby|countdown|quiz|results|pong
   const [sessionCode, setSessionCode] = useState("");
-  const [created, setCreated] = useState(false);
   const [players, setPlayers] = useState([]);
-  const [gameStarted, setGameStarted] = useState(false);
-  const [countdown, setCountdown] = useState(0);
-  const [currentGame, setCurrentGame] = useState("pong");
+  const [qIndex, setQIndex] = useState(0);
 
   async function createSession() {
-    const code = Math.random().toString(36).substring(2, 7).toUpperCase();
+    const code = Math.random().toString(36).slice(2,7).toUpperCase();
     await supabase.from("sessions").insert([{ code }]);
-    await supabase.from("game_state").insert([{ session_code: code, current_game: "pong" }]);
+    await supabase.from("game_state").upsert({
+      session_code: code, status:"waiting", current_game:"quiz", current_question:0, join_locked:false
+    });
     setSessionCode(code);
-    setCreated(true);
   }
 
-  // countdown logic
-  async function startGame() {
-    setCountdown(5);
-    await supabase
-      .from("game_state")
-      .update({ status: "countdown", start_time: new Date().toISOString() })
-      .eq("session_code", sessionCode);
-
-    const interval = setInterval(() => {
-      setCountdown((c) => {
-        if (c === 1) {
-          clearInterval(interval);
-          launchGame();
-          return 0;
-        }
-        return c - 1;
-      });
-    }, 1000);
-  }
-
-  async function launchGame() {
-    setGameStarted(true);
-    await supabase
-      .from("game_state")
-      .update({ status: "running" })
-      .eq("session_code", sessionCode);
-  }
-
-  // realtime jucători
+  // load + realtime players (filtrat pe sesiune)
   useEffect(() => {
-    const sub = supabase
-      .channel("players")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "players" },
-        (payload) => setPlayers((prev) => [...prev, payload.new])
-      )
-      .subscribe();
-    return () => supabase.removeChannel(sub);
-  }, []);
+    if (!sessionCode) return;
+    supabase.from('players').select('*').eq('session_code', sessionCode).then(({data})=>setPlayers(data||[]));
+    const ch = supabase.channel(`p-${sessionCode}`).on('postgres_changes', {
+      event:'INSERT', schema:'public', table:'players', filter:`session_code=eq.${sessionCode}`
+    }, (p)=> setPlayers(prev=>[...prev,p.new])).subscribe();
+    return ()=> supabase.removeChannel(ch);
+  }, [sessionCode]);
+
+  // lock scroll în afara lobby
+  useEffect(() => {
+    document.body.classList.toggle('no-scroll', phase!=='lobby');
+    return () => document.body.classList.remove('no-scroll');
+  }, [phase]);
+
+  const start = async () => {
+    setPhase("countdown");
+    await supabase.from('game_state').update({status:'countdown', join_locked:true})
+      .eq('session_code', sessionCode);
+  };
+
+  const startQuiz = async () => {
+    setPhase("quiz");
+    setQIndex(0);
+    await supabase.from('game_state').update({
+      status:'running', current_game:'quiz', current_question:0
+    }).eq('session_code', sessionCode);
+  };
+
+  // când expiră timpul unei întrebări → avansează sau trece la results
+  const handleQuestionEnd = async () => {
+    if (qIndex+1 < gamingQuestions.length) {
+      setQIndex(qIndex+1);
+      await supabase.from('game_state').update({ current_question:qIndex+1 })
+        .eq('session_code', sessionCode);
+    } else {
+      setPhase('results');
+    }
+  };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-black text-white">
-      {!created ? (
-        <>
-          <h1 className="text-4xl mb-6 text-pink-400">MiniMadness 🕹️</h1>
-          <button
-            onClick={createSession}
-            className="px-8 py-4 bg-pink-600 rounded hover:bg-pink-700"
-          >
+    <>
+      {/* overlay code + count */}
+      {sessionCode && phase!=='lobby' && (
+        <div className="fixed top-3 left-3 text-xs text-white/70 z-50">
+          <div>Code: <b>{sessionCode}</b></div>
+          <div>Players: <b>{players.length}</b></div>
+        </div>
+      )}
+
+      {(!sessionCode) && (
+        <div className="flex items-center justify-center min-h-screen bg-black text-white">
+          <button onClick={createSession} className="px-8 py-4 rounded bg-pink-600 hover:bg-pink-700">
             Create Session
           </button>
-        </>
-      ) : (
-        <>
-          <QRCodeCanvas value={`https://minimadness.vercel.app/join/${sessionCode}`} size={180} />
-          <p className="mt-4">Session Code: {sessionCode}</p>
-
-          {!gameStarted && countdown === 0 && (
-            <>
-              <h3 className="mt-6 text-lg">Players joined: {players.length}</h3>
-              <button
-                onClick={startGame}
-                className="mt-4 px-6 py-3 bg-green-500 rounded hover:bg-green-600"
-              >
-                Start Game
-              </button>
-            </>
-          )}
-
-          {countdown > 0 && (
-            <h2
-              className="text-7xl font-bold text-pink-400 animate-pulse transition-transform"
-              style={{ transform: `scale(${1 + countdown * 0.1})` }}
-            >
-              {countdown}
-            </h2>
-          )}
-
-          {gameStarted && (
-            <div className="mt-8 w-full flex justify-center">
-              {/* 🔽 aici integrezi minigame-ul actual */}
-              <iframe
-                title="PongGame"
-                src={`/minigames/${currentGame}?session=${sessionCode}`}
-                className="border-none w-[700px] h-[400px] rounded-lg"
-              />
-            </div>
-          )}
-        </>
+        </div>
       )}
-    </div>
+
+      {(sessionCode && phase==='lobby') && (
+        <div className="flex flex-col items-center justify-center min-h-screen bg-black text-white">
+          <QRCodeCanvas value={`https://minimadness.vercel.app/join/${sessionCode}`} size={180}/>
+          <p className="mt-3">Session Code: <b>{sessionCode}</b></p>
+          <p className="text-sm text-gray-300">Players joined: {players.length}</p>
+          <button onClick={start} className="mt-6 px-8 py-4 rounded bg-pink-600 hover:bg-pink-700">
+            Start Game
+          </button>
+        </div>
+      )}
+
+      {phase==='countdown' && (
+        <CountdownScreen onFinish={startQuiz}/>
+      )}
+
+      {phase==='quiz' && (
+        <div className="flex flex-col items-center justify-center min-h-screen
+                        bg-gradient-to-br from-[#0b0015] via-[#120024] to-[#0b0015] text-white">
+          <h2 className="text-3xl text-pink-400 mb-6">{gamingQuestions[qIndex].q}</h2>
+          {/* timer plăcintă pe host (același timp ca la player) */}
+          <PieTimer keySeed={qIndex} ms={QUESTION_MS} onDone={handleQuestionEnd}/>
+          <p className="mt-4 text-sm text-gray-400">Question {qIndex+1} / {gamingQuestions.length}</p>
+        </div>
+      )}
+
+      {phase==='results' && <ResultsScreen sessionCode={sessionCode} onNext={()=>setPhase('pong')} />}
+
+      {phase==='pong' && (
+        <div className="flex items-center justify-center min-h-screen bg-black">
+          {/* teren mic într-un card */}
+          <div className="bg-[#15002a] rounded-2xl p-4 shadow-xl">
+            <PongGame width={560} height={360}/>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
