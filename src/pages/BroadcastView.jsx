@@ -8,6 +8,7 @@ import ResultsScreen from "./ResultsScreen";
 import WaitingScreen from "./WaitingScreen";
 import PongGame from "./PongGame";
 import { gsap } from "gsap";
+import { gamingQuestions } from "../data/questions";
 
 export default function BroadcastView() {
   const { code } = useParams();
@@ -22,14 +23,10 @@ export default function BroadcastView() {
 
   useEffect(() => {
     if (!containerRef.current) return;
-    gsap.fromTo(
-      containerRef.current,
-      { opacity: 0, scale: 1.05 },
-      { opacity: 1, scale: 1, duration: 0.7, ease: "power3.out" }
-    );
+    gsap.fromTo(containerRef.current, { opacity: 0, scale: 1.05 }, { opacity: 1, scale: 1, duration: 0.7, ease: "power3.out" });
   }, [status]);
 
-  // Realtime game_state
+  // realtime game_state
   useEffect(() => {
     if (!code) return;
 
@@ -65,7 +62,7 @@ export default function BroadcastView() {
     return () => supabase.removeChannel(channel);
   }, [code]);
 
-  // Realtime players
+  // realtime players
   useEffect(() => {
     if (!code) return;
     const channel = supabase
@@ -82,7 +79,7 @@ export default function BroadcastView() {
     return () => supabase.removeChannel(channel);
   }, [code]);
 
-  // After countdown → set quiz + deadline (source of truth)
+  // After the SINGLE opening countdown → start first quiz with deadline
   async function startQuestion() {
     const deadline = new Date(Date.now() + 10000).toISOString(); // 10s
     await supabase
@@ -91,9 +88,8 @@ export default function BroadcastView() {
       .eq("session_code", code);
   }
 
-  // After quiz → compute and show results
+  // When quiz ends (timer or broadcast onFinish) → compute team scores + show results
   async function showResults() {
-    const { gamingQuestions } = await import("../data/questions");
     const q = gamingQuestions[currentQuestion];
     const correct = q.c;
 
@@ -121,22 +117,25 @@ export default function BroadcastView() {
       .eq("session_code", code);
   }
 
-  // Next question or Pong
+  // Next question: NO countdown between questions, go straight to next quiz after results pause
   async function nextQuestion() {
-    const { gamingQuestions } = await import("../data/questions");
     if (currentQuestion + 1 >= gamingQuestions.length) {
       await supabase.from("game_state").update({ status: "pong" }).eq("session_code", code);
       return;
     }
 
-    await supabase.from("game_state").update({ status: "intermission" }).eq("session_code", code);
+    const nextIndex = currentQuestion + 1;
+    const deadline = new Date(Date.now() + 10000).toISOString(); // 10s for next question
 
-    setTimeout(async () => {
-      await supabase
-        .from("game_state")
-        .update({ status: "countdown", current_question: currentQuestion + 1 })
-        .eq("session_code", code);
-    }, 2500);
+    await supabase
+      .from("game_state")
+      .update({
+        status: "quiz",
+        current_question: nextIndex,
+        question_deadline: deadline,
+        correct_answer: null,
+      })
+      .eq("session_code", code);
   }
 
   // UI
@@ -157,12 +156,15 @@ export default function BroadcastView() {
   }
 
   if (status === "results") {
+    const q = gamingQuestions[currentQuestion];
     return (
       <div ref={containerRef}>
         <ResultsScreen
           sessionCode={code}
           currentQuestion={currentQuestion}
-          correctAnswer={correctAnswer}
+          questionText={q.q}
+          options={q.a}
+          correctAnswer={q.c}
           blueScore={blueScore}
           redScore={redScore}
           blueName={sessionInfo?.team_blue_name || "Blue"}
@@ -171,10 +173,6 @@ export default function BroadcastView() {
         />
       </div>
     );
-  }
-
-  if (status === "intermission") {
-    return <CountdownScreen onFinish={startQuestion} />;
   }
 
   if (status === "pong") {

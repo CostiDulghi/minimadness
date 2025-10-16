@@ -170,17 +170,24 @@ export default function HostSession() {
 
         <button
           onClick={async () => {
-            const { error } = await supabase
-              .from("game_state")
-              .update({
-                status: "countdown",
-                current_question: 0,
-                join_locked: true,
-              })
-              .eq("session_code", sessionCode);
+  const { error } = await supabase
+    .from("game_state")
+    .update({
+      status: "countdown",
+      countdown: 5,       // your existing column for countdown time
+      current_game: "quiz", // matches your schema
+      join_locked: true,
+    })
+    .eq("session_code", sessionCode);
 
-            if (error) alert("Error starting game");
-          }}
+  if (error) {
+    console.error("❌ Error starting game:", error);
+    alert("Error starting game");
+  } else {
+    console.log("✅ Game started!");
+  }
+}}
+
           className="flex items-center gap-2 px-8 py-3 text-lg font-semibold rounded-xl text-white 
              bg-gradient-to-r from-pink-500 to-red-500 shadow-[0_0_20px_rgba(255,0,100,0.4)]
              hover:shadow-[0_0_30px_rgba(255,0,100,0.7)] hover:scale-105 transition-all duration-300"

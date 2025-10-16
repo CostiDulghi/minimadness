@@ -22,7 +22,6 @@ export default function QuizGame({
     options: q.a,
     answer: q.c,
   }));
-
   const question = questions[index];
 
   // Sync from DB
@@ -33,12 +32,7 @@ export default function QuizGame({
       .channel(`game-${sessionCode}`)
       .on(
         "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "game_state",
-          filter: `session_code=eq.${sessionCode}`,
-        },
+        { event: "UPDATE", schema: "public", table: "game_state", filter: `session_code=eq.${sessionCode}` },
         (payload) => {
           if (payload.new.question_deadline) setDeadline(payload.new.question_deadline);
           if (typeof payload.new.current_question === "number") setIndex(payload.new.current_question);
@@ -52,7 +46,6 @@ export default function QuizGame({
         .select("question_deadline, current_question")
         .eq("session_code", sessionCode)
         .single();
-
       if (data) {
         setDeadline(data.question_deadline);
         setIndex(data.current_question || 0);
@@ -77,9 +70,9 @@ export default function QuizGame({
         clearInterval(interval);
 
         if (!isBroadcast) {
-          handleAnswer(null, true);
+          handleAnswer(null, true); // no answer / timeout
         } else {
-          onFinish?.();
+          onFinish?.(); // broadcast transitions to results
         }
       }
     }, 250);
@@ -87,14 +80,15 @@ export default function QuizGame({
     return () => clearInterval(interval);
   }, [deadline, isBroadcast]);
 
-  // Save answer for player
+  // Save player's answer
   async function handleAnswer(option, auto = false) {
     if (isLocked || isBroadcast) return;
     setIsLocked(true);
     setSelected(option);
 
     const isCorrect = option === question.answer;
-    const speedBonus = Math.max(0, Math.floor((timeLeft / 10) * 50));
+    // Base 50 if correct + speed bonus 1–50 (timeLeft 0–10 -> 0–50)
+    const speedBonus = Math.max(0, Math.floor(timeLeft * 5));
     const score = isCorrect ? 50 + speedBonus : 0;
 
     await supabase.from("answers").insert([{
@@ -109,9 +103,7 @@ export default function QuizGame({
     }]);
 
     if (!auto) {
-      setTimeout(() => {
-        onFinish?.(); // players switch to waiting/results screen; Broadcast flips the DB status
-      }, 300);
+      setTimeout(() => onFinish?.(), 300);
     }
   }
 
@@ -126,16 +118,18 @@ export default function QuizGame({
     <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-[#0b0015] via-[#160028] to-[#0b0015] text-white text-center">
       <h2 className="text-3xl text-pink-400 mb-6">{question.question}</h2>
 
+      {/* Timer bar */}
       <div className="relative w-64 h-3 bg-gray-700 rounded-full overflow-hidden mb-8">
         <div
           className="absolute left-0 top-0 h-full bg-pink-500 transition-all duration-250"
           style={{ width: `${(timeLeft / 10) * 100}%` }}
-        ></div>
+        />
       </div>
       <p className="text-gray-400 mb-4 text-sm">
         Time left: <span className="text-pink-300 font-semibold">{timeLeft}s</span>
       </p>
 
+      {/* Options – NO correctness coloring for players */}
       <div className="grid grid-cols-2 gap-4 w-[70%] max-w-2xl">
         {question.options.map((opt) => (
           <button
@@ -143,11 +137,7 @@ export default function QuizGame({
             disabled={isLocked || isBroadcast}
             onClick={() => handleAnswer(opt)}
             className={`px-6 py-4 rounded-xl text-lg font-semibold transition-all duration-300 ${
-              selected === opt
-                ? opt === question.answer
-                  ? "bg-green-500 scale-105"
-                  : "bg-red-500 scale-95"
-                : "bg-purple-700 hover:bg-purple-600"
+              selected === opt ? "bg-purple-600 scale-105" : "bg-purple-700 hover:bg-purple-600"
             }`}
           >
             {opt}

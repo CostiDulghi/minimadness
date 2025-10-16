@@ -155,9 +155,10 @@ export default function JoinSession() {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-[#0b0015] via-[#160028] to-[#0b0015] text-white text-center">
         <h2 className="text-4xl text-pink-400 font-extrabold mb-4">Results</h2>
-        <p className="text-lg text-gray-300">
-          You scored <span className="text-pink-300 font-bold">{score}</span> points this round!
-        </p>
+        if (status === "results") {
+  return <WaitingScreen message="Watch the big screen for the answer & scores..." />;
+}
+
         <p className="mt-8 text-gray-400 animate-pulse">Next round starting...</p>
       </div>
     );
