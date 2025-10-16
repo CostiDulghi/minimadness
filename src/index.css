@@ -2,6 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  @apply bg-dark text-white;
+html, body {
+	@apply bg-dark text-white;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  height: 100%;
 }
+
+

@@ -1,117 +1,57 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "../supabaseClient";
-import PieTimer from "../components/PieTimer";
-import { gamingQuestions } from "../data/questions";
-
-const QUESTION_MS = 15000;
+import { Gamepad2 } from "lucide-react";
 
 export default function JoinSession() {
   const { code } = useParams();
-  const [name, setName] = useState(localStorage.getItem('mm_name')||"");
-  const [team, setTeam] = useState(localStorage.getItem('mm_team')||"");
-  const [joined, setJoined] = useState(!!localStorage.getItem('mm_joined'));
-  const [state, setState] = useState({ status:'waiting', current_question:0, current_game:'quiz' });
-  const q = gamingQuestions[state.current_question];
+  const [name, setName] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  // realtime game_state
-  useEffect(() => {
-    if (!code) return;
-    supabase.from('game_state').select('status,current_question,current_game,join_locked')
-      .eq('session_code', code).single().then(({data})=> data && setState(data));
-    const ch = supabase.channel(`gs-${code}`).on('postgres_changes',{
-      event:'UPDATE', schema:'public', table:'game_state', filter:`session_code=eq.${code}`
-    }, (p)=> setState(p.new)).subscribe();
-    return ()=> supabase.removeChannel(ch);
-  }, [code]);
-
-  async function join(t) {
-    // blochează join după start
-    const { data: gs } = await supabase.from('game_state').select('join_locked').eq('session_code', code).single();
-    if (gs?.join_locked) { alert("Game already started."); return; }
-
-    await supabase.from('players').insert([{ name, team:t, session_code:code }]);
-    localStorage.setItem('mm_name', name);
-    localStorage.setItem('mm_team', t);
-    localStorage.setItem('mm_joined', '1');
-    setTeam(t); setJoined(true);
+  async function join(team) {
+    setLoading(true);
+    const { data: gs } = await supabase.from("game_state").select("join_locked").eq("session_code", code).single();
+    if (gs?.join_locked) return alert("Game already started!");
+    await supabase.from("players").insert([{ name, team, session_code: code }]);
+    localStorage.setItem("mm_name", name);
+    localStorage.setItem("mm_team", team);
+    setLoading(false);
+    window.location.reload();
   }
 
-  // submit fără feedback; calculez puncte: corect?(50 + speedBonus): 0
-  async function submitAnswer(opt, timeLeftMs) {
-    const correct = q.c;
-    const isCorrect = opt === correct;
-    const speed = Math.max(0, Math.min(100, Math.round((timeLeftMs/QUESTION_MS)*100))); // 0..100
-    const points = isCorrect ? 50 + Math.round(speed * 0.5) : 0;  // bază 50 + bonus viteză
-
-    await supabase.from('answers').insert([{
-      session_code: code,
-      player_name: name,
-      team,
-      q_index: state.current_question,
-      chosen: opt,
-      correct,
-      is_correct: isCorrect,
-      time_left_ms: timeLeftMs,
-      points
-    }]);
-
-    // nu arătăm corect/greșit; doar închidem butoanele
-    setAnswered(true);
-  }
-
-  const [answered, setAnswered] = useState(false);
-  useEffect(()=> setAnswered(false), [state.current_question]); // reset la întrebare nouă
-
-  if (!joined) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-[#0b0015] text-white">
-        <h1 className="text-3xl mb-6 text-pink-400">Join MiniMadness</h1>
-        <input className="px-4 py-2 rounded text-black mb-4" value={name}
-          onChange={e=>setName(e.target.value)} placeholder="Your name"/>
-        <div className="flex gap-4">
-          <button onClick={()=>join('blue')} disabled={!name} className="px-6 py-3 rounded bg-blue-600">Join Blue</button>
-          <button onClick={()=>join('red')}  disabled={!name} className="px-6 py-3 rounded bg-red-600">Join Red</button>
-        </div>
-      </div>
-    );
-  }
-
-  if (state.status==='countdown')
-    return (<div className="flex items-center justify-center min-h-screen text-pink-400 text-3xl">Get ready…</div>);
-
-  if (state.current_game==='quiz' && state.status==='running')
-    return (
-      <QuizPlayer
-        question={q}
-        qIndex={state.current_question}
-        disabled={answered}
-        onAnswer={submitAnswer}
-      />
-    );
-
-  if (state.current_game==='pong')
-    return (<div className="flex items-center justify-center min-h-screen text-white">Controller coming here…</div>);
-
-  return (<div className="flex items-center justify-center min-h-screen text-white">Waiting…</div>);
-}
-
-function QuizPlayer({ question, qIndex, disabled, onAnswer }) {
-  // păstrăm timpul rămas local, îl dăm la submit
-  const [left, setLeft] = useState(15000);
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-[#0b0015] text-white">
-      <h2 className="text-xl text-pink-400 mb-4 text-center px-6">{question.q}</h2>
-      <PieTimer ms={15000} keySeed={qIndex} onDone={()=>{}} />
-      <div className="grid grid-cols-2 gap-3 w-[90%] max-w-[520px] mt-6">
-        {question.a.map(opt => (
-          <button key={opt} disabled={disabled}
-            onClick={()=>onAnswer(opt, left)}
-            className={`px-4 py-3 rounded-xl text-base font-medium bg-purple-700 hover:bg-purple-600
-                        disabled:opacity-50 disabled:cursor-not-allowed`}>
-            {opt}
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-[#12002e] via-[#0a001a] to-[#12002e] text-white relative overflow-hidden">
+      <div className="absolute inset-0 opacity-30 bg-[radial-gradient(circle_at_center,rgba(255,0,255,0.15),transparent_60%)] animate-pulse"></div>
+
+      <div className="relative z-10 text-center px-6">
+        <h1 className="text-4xl font-bold text-pink-400 mb-3 flex justify-center items-center gap-2">
+          Join MiniMadness <Gamepad2 className="text-pink-500 w-8 h-8" />
+        </h1>
+
+        <input
+          type="text"
+          placeholder="Your name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="mt-6 w-64 text-center p-3 rounded-xl bg-white/90 text-black text-lg focus:ring-2 focus:ring-pink-400 outline-none"
+        />
+
+        <div className="flex justify-center gap-6 mt-6">
+          <button
+            disabled={!name || loading}
+            onClick={() => join("blue")}
+            className="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition disabled:opacity-50"
+          >
+            Join Blue
           </button>
-        ))}
+          <button
+            disabled={!name || loading}
+            onClick={() => join("red")}
+            className="px-8 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition disabled:opacity-50"
+          >
+            Join Red
+          </button>
+        </div>
       </div>
     </div>
   );

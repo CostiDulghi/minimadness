@@ -4,13 +4,19 @@ import { useEffect, useState } from "react";
 export default function PieTimer({ ms=15000, keySeed=0, onDone }) {
   const [left, setLeft] = useState(ms);
   useEffect(() => {
-    setLeft(ms);
-    const t = setInterval(() => setLeft(v => {
-      if (v <= 50) { clearInterval(t); onDone?.(); return 0; }
-      return v-50;
-    }), 50);
-    return () => clearInterval(t);
-  }, [ms, keySeed, onDone]);
+  const start = performance.now();
+  let frame;
+  const tick = (t) => {
+    const elapsed = t - start;
+    const remain = Math.max(0, ms - elapsed);
+    setLeft(remain);
+    if (remain > 0) frame = requestAnimationFrame(tick);
+    else onDone?.();
+  };
+  frame = requestAnimationFrame(tick);
+  return () => cancelAnimationFrame(frame);
+}, [ms, keySeed]);
+
 
   const r = 42, C = 2*Math.PI*r;
   const pct = left/ms;
