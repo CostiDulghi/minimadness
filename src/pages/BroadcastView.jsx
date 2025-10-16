@@ -30,41 +30,46 @@ export default function BroadcastView() {
 
   // 🧠 ascultare realtime game_state
   useEffect(() => {
-    if (!code) return;
+  if (!code) return;
 
-    const channel = supabase
-      .channel(`game-${code}`)
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "game_state", filter: `session_code=eq.${code}` },
-        (payload) => {
-          setStatus(payload.new.status);
-          setCurrentQuestion(payload.new.current_question || 0);
-        }
-      )
-      .subscribe();
-
-    (async () => {
-      const { data: state } = await supabase
-        .from("game_state")
-        .select("*")
-        .eq("session_code", code)
-        .single();
-      if (state) {
-        setStatus(state.status);
-        setCurrentQuestion(state.current_question || 0);
+  const channel = supabase
+    .channel(`game-${code}`)
+    .on(
+      "postgres_changes",
+      { event: "UPDATE", schema: "public", table: "game_state", filter: `session_code=eq.${code}` },
+      (payload) => {
+        setStatus(payload.new.status);
+        setCurrentQuestion(payload.new.current_question || 0);
+        if (payload.new.correct_answer) setCorrectAnswer(payload.new.correct_answer); // 🔥 realtime refresh
       }
+    )
+    .subscribe();
 
-      const { data: sess } = await supabase
-        .from("sessions")
-        .select("*")
-        .eq("code", code)
-        .single();
-      if (sess) setSessionInfo(sess);
-    })();
+  // 🔹 Citim starea inițială asincron
+  (async () => {
+    const { data: state } = await supabase
+      .from("game_state")
+      .select("*")
+      .eq("session_code", code)
+      .single();
 
-    return () => supabase.removeChannel(channel);
-  }, [code]);
+    if (state) {
+      setStatus(state.status);
+      setCurrentQuestion(state.current_question || 0);
+      if (state.correct_answer) setCorrectAnswer(state.correct_answer); // 👈 persistă răspunsul corect
+    }
+
+    const { data: sess } = await supabase
+      .from("sessions")
+      .select("*")
+      .eq("code", code)
+      .single();
+
+    if (sess) setSessionInfo(sess);
+  })();
+
+  return () => supabase.removeChannel(channel);
+}, [code]);
 
   // 👥 ascultare realtime players
   useEffect(() => {
@@ -99,51 +104,58 @@ export default function BroadcastView() {
 }
 
 
+
   // 🧮 calculează scoruri și merge la results
   async function showResults() {
-    const { gamingQuestions } = await import("../data/questions");
-    const q = gamingQuestions[currentQuestion];
-    setCorrectAnswer(q.c);
+  const { gamingQuestions } = await import("../data/questions");
+  const q = gamingQuestions[currentQuestion];
+  setCorrectAnswer(q.c);
+
+  await supabase
+  .from("game_state")
+  .update({
+    status: "results",
+  })
+  .eq("session_code", code);
+
+
+
+  // așteaptă 2s și verifică dacă există răspunsuri
+  setTimeout(async () => {
+    const { data: answers } = await supabase
+      .from("answers")
+      .select("*")
+      .eq("session_code", code)
+      .eq("question_index", currentQuestion);
+
+    if (!answers || answers.length === 0) {
+      // fallback fără răspunsuri
+      await supabase
+        .from("game_state")
+        .update({ status: "results" })
+        .eq("session_code", code);
+      return;
+    }
+
+    // scoruri pe echipe
+    const blueScore = answers
+      .filter((a) => a.team === "blue")
+      .reduce((s, a) => s + a.score, 0);
+    const redScore = answers
+      .filter((a) => a.team === "red")
+      .reduce((s, a) => s + a.score, 0);
 
     await supabase
       .from("game_state")
-      .update({ status: "calculating" })
+      .update({
+        status: "results",
+        blue_score: blueScore,
+        red_score: redScore,
+      })
       .eq("session_code", code);
+  }, 2000);
+}
 
-    // 🕓 așteaptă răspunsurile jucătorilor
-    setTimeout(async () => {
-      const { data: answers } = await supabase
-        .from("answers")
-        .select("*")
-        .eq("session_code", code)
-        .eq("question_index", currentQuestion);
-
-      if (answers && answers.length > 0) {
-        // calculează media per echipă
-        const blueAvg =
-          answers.filter((a) => a.team === "blue").reduce((sum, a) => sum + a.score, 0) /
-          Math.max(1, answers.filter((a) => a.team === "blue").length);
-        const redAvg =
-          answers.filter((a) => a.team === "red").reduce((sum, a) => sum + a.score, 0) /
-          Math.max(1, answers.filter((a) => a.team === "red").length);
-
-        await supabase
-          .from("game_state")
-          .update({
-            status: "results",
-            blue_score: blueAvg,
-            red_score: redAvg,
-          })
-          .eq("session_code", code);
-      } else {
-        // fallback în caz că nu a răspuns nimeni
-        await supabase
-          .from("game_state")
-          .update({ status: "results" })
-          .eq("session_code", code);
-      }
-    }, 2000);
-  }
 
   // ⏭️ întrebare următoare sau Pong
   async function nextQuestion() {
@@ -175,11 +187,16 @@ export default function BroadcastView() {
 
   // 🎮 UI logic
   if (status === "countdown")
-    return (
-      <div ref={containerRef}>
-        <CountdownScreen duration={5} label="Get ready... the round is starting!" onFinish={startQuestion} />
-      </div>
-    );
+  return (
+    <div ref={containerRef}>
+      <CountdownScreen
+        duration={5}
+        label="Get ready... the round is starting!"
+        onFinish={startQuestion}
+      />
+    </div>
+  );
+
 
   if (status === "quiz")
     return (
