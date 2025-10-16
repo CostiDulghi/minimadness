@@ -65,20 +65,29 @@ export default function QuizGame({
 
   // 🧮 Timer sincronizat cu deadline-ul global
   useEffect(() => {
-    if (!deadline) return;
-    const interval = setInterval(() => {
-      const diff = Math.floor(
-        (new Date(deadline).getTime() - Date.now()) / 1000
-      );
-      setTimeLeft(diff > 0 ? diff : 0);
-      if (diff <= 0) {
-        clearInterval(interval);
-        if (!isBroadcast) handleAnswer(null, true);
-        else onFinish?.(); // broadcast trece la rezultate
+  if (!deadline) return;
+
+  let finished = false;
+
+  const interval = setInterval(() => {
+    const diff = Math.floor((new Date(deadline).getTime() - Date.now()) / 1000);
+    setTimeLeft(diff > 0 ? diff : 0);
+
+    if (diff <= 0 && !finished) {
+      finished = true;
+      clearInterval(interval);
+
+      if (!isBroadcast) handleAnswer(null, true);
+      else {
+        console.log("⏰ Countdown ended — showing results");
+        onFinish?.();
       }
-    }, 250);
-    return () => clearInterval(interval);
-  }, [deadline]);
+    }
+  }, 250);
+
+  return () => clearInterval(interval);
+}, [deadline]);
+
 
   // 🧾 Salvare răspuns jucător
   async function handleAnswer(option, auto = false) {

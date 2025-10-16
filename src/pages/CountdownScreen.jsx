@@ -11,17 +11,20 @@ export default function CountdownScreen({ onFinish }) {
   const timer = setInterval(() => {
     setCount((prev) => {
       if (prev === 1) {
-        clearInterval(timer);
-        gsap.to(countRef.current, {
-          scale: 3,
-          opacity: 0,
-          duration: 0.6,
-          onComplete: () => {
-            if (onFinish) onFinish(); // doar la final
-          },
-        });
-        return 0;
-      }
+  clearInterval(timer);
+  gsap.to(countRef.current, {
+    scale: 3,
+    opacity: 0,
+    duration: 0.6,
+    onComplete: () => {
+      setTimeout(() => {
+        onFinish?.(); // 👈 delay scurt
+      }, 300);
+    },
+  });
+  return 0;
+}
+
       return prev - 1;
     });
   }, 1000);

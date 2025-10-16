@@ -4,7 +4,6 @@ import { supabase } from "../supabaseClient";
 import { Gamepad2, Loader2, Sparkles } from "lucide-react";
 import CountdownScreen from "./CountdownScreen";
 import QuizGame from "./QuizGame";
-import PongGame from "./PongGame";
 import WaitingScreen from "./WaitingScreen";
 import { gsap } from "gsap";
 
@@ -15,55 +14,25 @@ export default function JoinSession() {
   const [joined, setJoined] = useState(false);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("waiting");
-
+  const [lastScore, setLastScore] = useState(null); // scorul personal
   const containerRef = useRef();
-  const glowRef = useRef();
-  const titleRef = useRef();
 
-  // 🌈 animație globală la montare + pe status change
+  // 🌈 Animație globală
   useEffect(() => {
     if (containerRef.current) {
       gsap.fromTo(
         containerRef.current,
-        { opacity: 0, y: 40, scale: 0.97 },
-        { opacity: 1, y: 0, scale: 1, duration: 0.9, ease: "power3.out" }
+        { opacity: 0, y: 40 },
+        { opacity: 1, y: 0, duration: 0.8, ease: "power3.out" }
       );
     }
-    if (glowRef.current) {
-      gsap.to(glowRef.current, {
-        scale: 1.2,
-        opacity: 0.9,
-        duration: 4,
-        repeat: -1,
-        yoyo: true,
-        ease: "power1.inOut",
-      });
-    }
-  }, [joined, status]);
+  }, [status]);
 
-  // ✨ puls pentru titlu
-  useEffect(() => {
-    if (titleRef.current) {
-      gsap.fromTo(
-        titleRef.current,
-        { opacity: 0.5, y: -5 },
-        {
-          opacity: 1,
-          y: 0,
-          duration: 2,
-          repeat: -1,
-          yoyo: true,
-          ease: "sine.inOut",
-        }
-      );
-    }
-  }, []);
-
-  // 🧠 realtime game status
+  // 🧠 Ascultare realtime status
   useEffect(() => {
     if (!code) return;
 
-    const gameChannel = supabase
+    const channel = supabase
       .channel(`game-${code}`)
       .on(
         "postgres_changes",
@@ -74,6 +43,7 @@ export default function JoinSession() {
           filter: `session_code=eq.${code}`,
         },
         (payload) => {
+          console.log("🎮 Player received update:", payload.new.status);
           setStatus(payload.new.status);
         }
       )
@@ -88,10 +58,10 @@ export default function JoinSession() {
       if (data?.status) setStatus(data.status);
     })();
 
-    return () => supabase.removeChannel(gameChannel);
+    return () => supabase.removeChannel(channel);
   }, [code]);
 
-  // 🟦🟥 join echipă
+  // 🟦🟥 Join echipă
   async function join(selectedTeam) {
     if (joined || loading) return;
     setLoading(true);
@@ -137,19 +107,49 @@ export default function JoinSession() {
     setLoading(false);
   }
 
-  // ⚡️ Switch logic - sincronizat complet cu Broadcast
-  if (status === "countdown")
-  return (
-    <CountdownScreen
-      duration={5}
-      label="Get ready... the round is starting!"
-    />
-  );
+  // 🧩 Afișează scorul după results
+  useEffect(() => {
+    if (status === "results") {
+      (async () => {
+        const { data } = await supabase
+          .from("answers")
+          .select("score")
+          .eq("session_code", code)
+          .eq("player", name)
+          .order("id", { ascending: false })
+          .limit(1);
+        if (data && data.length > 0) setLastScore(data[0].score);
+      })();
+    }
+  }, [status]);
 
-  if (status === "quiz") return <QuizGame sessionCode={code} playerName={name} team={team} />;
-  if (status === "calculating" || status === "results")
-    return <WaitingScreen message="Calculating scores..." />;
-  if (status === "pong") return <PongGame sessionCode={code} />;
+  // ⚡️ Flow principal sincronizat cu Broadcast
+  if (status === "countdown")
+    return <CountdownScreen onFinish={() => {}} />;
+
+  if (status === "quiz")
+    return (
+      <QuizGame
+        sessionCode={code}
+        playerName={name}
+        team={team}
+        onFinish={() => setStatus("results")}
+      />
+    );
+
+  if (status === "results")
+    return (
+      <WaitingScreen
+        message={
+          lastScore === null
+            ? "Calculating your score..."
+            : `You scored ${lastScore} points!`
+        }
+      />
+    );
+
+  if (status === "pong")
+    return <WaitingScreen message="Next Game starting soon..." />;
 
   // 💫 Ecran principal de Join
   return (
@@ -157,25 +157,14 @@ export default function JoinSession() {
       ref={containerRef}
       className="flex flex-col items-center justify-center min-h-screen text-white bg-gradient-to-br from-[#0a001a] via-[#150032] to-[#0a001a] overflow-hidden relative"
     >
-      {/* Glow background */}
-      <div
-        ref={glowRef}
-        className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,0,255,0.12),transparent_70%)] blur-2xl"
-      ></div>
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,0,255,0.12),transparent_70%)] blur-2xl"></div>
 
       {!joined ? (
         <div className="relative z-10 text-center">
-          <h1
-            ref={titleRef}
-            className="text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-pink-400 via-fuchsia-500 to-purple-500 mb-3 flex justify-center items-center gap-2 drop-shadow-[0_0_20px_rgba(255,100,200,0.6)]"
-          >
+          <h1 className="text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-pink-400 via-fuchsia-500 to-purple-500 mb-3 flex justify-center items-center gap-2 drop-shadow-[0_0_20px_rgba(255,100,200,0.6)]">
             Join <span className="text-white">MiniMadness</span>
             <Gamepad2 className="text-pink-400 w-8 h-8" />
           </h1>
-
-          <p className="text-gray-400 mb-6 text-sm tracking-wide">
-            Enter your name and choose your team
-          </p>
 
           <input
             type="text"
@@ -198,9 +187,7 @@ export default function JoinSession() {
               {loading ? (
                 <Loader2 className="animate-spin inline w-5 h-5" />
               ) : (
-                <>
-                  🟦 Join <span className="text-blue-200 ml-1">Blue Team</span>
-                </>
+                "🟦 Join Blue Team"
               )}
             </button>
 
@@ -216,15 +203,9 @@ export default function JoinSession() {
               {loading ? (
                 <Loader2 className="animate-spin inline w-5 h-5" />
               ) : (
-                <>
-                  🟥 Join <span className="text-pink-200 ml-1">Red Team</span>
-                </>
+                "🟥 Join Red Team"
               )}
             </button>
-          </div>
-
-          <div className="mt-10 flex justify-center">
-            <Sparkles className="text-pink-400 animate-pulse w-6 h-6" />
           </div>
         </div>
       ) : (
@@ -240,9 +221,7 @@ export default function JoinSession() {
             <p>
               You’re in{" "}
               <b
-                className={
-                  team === "blue" ? "text-blue-400" : "text-red-400"
-                }
+                className={team === "blue" ? "text-blue-400" : "text-red-400"}
               >
                 Team {team.toUpperCase()}
               </b>

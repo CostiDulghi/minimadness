@@ -18,7 +18,7 @@ export default function BroadcastView() {
   const [correctAnswer, setCorrectAnswer] = useState(null);
   const containerRef = useRef();
 
-  // 🔄 animare smooth la fiecare schimbare de status
+  // 🔄 Animație smooth la fiecare schimbare de status
   useEffect(() => {
     if (!containerRef.current) return;
     gsap.fromTo(
@@ -28,57 +28,85 @@ export default function BroadcastView() {
     );
   }, [status]);
 
-  // 🧠 ascultare realtime game_state
+  // 🧠 Ascultare realtime game_state
   useEffect(() => {
-  if (!code) return;
+    if (!code) return;
 
-  const channel = supabase
-    .channel(`game-${code}`)
-    .on(
-      "postgres_changes",
-      { event: "UPDATE", schema: "public", table: "game_state", filter: `session_code=eq.${code}` },
-      (payload) => {
-        setStatus(payload.new.status);
-        setCurrentQuestion(payload.new.current_question || 0);
-        if (payload.new.correct_answer) setCorrectAnswer(payload.new.correct_answer); // 🔥 realtime refresh
+    const channel = supabase
+      .channel(`game-${code}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "game_state",
+          filter: `session_code=eq.${code}`,
+        },
+        async (payload) => {
+          const newState = payload.new;
+          console.log("📡 Broadcast update:", newState.status);
+
+          setStatus(newState.status);
+          setCurrentQuestion(newState.current_question || 0);
+          setCorrectAnswer(newState.correct_answer || null);
+
+          // dacă intrăm în countdown, ne asigurăm că sincronizăm din DB
+          if (newState.status === "countdown") {
+            const { data: latest } = await supabase
+              .from("game_state")
+              .select("*")
+              .eq("session_code", code)
+              .single();
+            if (latest) {
+              setStatus(latest.status);
+              setCurrentQuestion(latest.current_question || 0);
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    // 📋 Citim starea inițială
+    (async () => {
+      const { data: state, error } = await supabase
+        .from("game_state")
+        .select("*")
+        .eq("session_code", code)
+        .single();
+
+      if (error) console.error("Eroare load state:", error);
+      if (state) {
+        console.log("🟢 Initial state:", state.status);
+        setStatus(state.status);
+        setCurrentQuestion(state.current_question || 0);
+        setCorrectAnswer(state.correct_answer || null);
       }
-    )
-    .subscribe();
 
-  // 🔹 Citim starea inițială asincron
-  (async () => {
-    const { data: state } = await supabase
-      .from("game_state")
-      .select("*")
-      .eq("session_code", code)
-      .single();
+      const { data: sess } = await supabase
+        .from("sessions")
+        .select("*")
+        .eq("code", code)
+        .single();
 
-    if (state) {
-      setStatus(state.status);
-      setCurrentQuestion(state.current_question || 0);
-      if (state.correct_answer) setCorrectAnswer(state.correct_answer); // 👈 persistă răspunsul corect
-    }
+      if (sess) setSessionInfo(sess);
+    })();
 
-    const { data: sess } = await supabase
-      .from("sessions")
-      .select("*")
-      .eq("code", code)
-      .single();
+    return () => supabase.removeChannel(channel);
+  }, [code]);
 
-    if (sess) setSessionInfo(sess);
-  })();
-
-  return () => supabase.removeChannel(channel);
-}, [code]);
-
-  // 👥 ascultare realtime players
+  // 👥 Ascultare realtime players
   useEffect(() => {
     if (!code) return;
     const channel = supabase
       .channel(`players-${code}`)
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "players", filter: `session_code=eq.${code}` },
+        {
+          event: "*",
+          schema: "public",
+          table: "players",
+          filter: `session_code=eq.${code}`,
+        },
         async () => {
           const { data } = await supabase
             .from("players")
@@ -88,76 +116,76 @@ export default function BroadcastView() {
         }
       )
       .subscribe();
+
     return () => supabase.removeChannel(channel);
   }, [code]);
 
-  // 🧩 când countdown-ul s-a terminat → start quiz
+  // 🧩 După countdown → start quiz
   async function startQuestion() {
-  const deadline = new Date(Date.now() + 10000).toISOString();
-  await supabase
-    .from("game_state")
-    .update({
-      status: "quiz",
-      question_deadline: deadline,
-    })
-    .eq("session_code", code);
-}
+    const deadline = new Date(Date.now() + 10000).toISOString(); // 10 secunde
+    console.log("🚀 Starting question...");
 
+    const { error } = await supabase
+      .from("game_state")
+      .update({
+        status: "quiz",
+        question_deadline: deadline,
+        correct_answer: null,
+      })
+      .eq("session_code", code);
 
+    if (error) console.error("❌ Failed to start question:", error);
+  }
 
-  // 🧮 calculează scoruri și merge la results
+  // 🧮 Calculează scoruri și merge la results
   async function showResults() {
-  const { gamingQuestions } = await import("../data/questions");
-  const q = gamingQuestions[currentQuestion];
-  setCorrectAnswer(q.c);
-
-  await supabase
-  .from("game_state")
-  .update({
-    status: "results",
-  })
-  .eq("session_code", code);
-
-
-
-  // așteaptă 2s și verifică dacă există răspunsuri
-  setTimeout(async () => {
-    const { data: answers } = await supabase
-      .from("answers")
-      .select("*")
-      .eq("session_code", code)
-      .eq("question_index", currentQuestion);
-
-    if (!answers || answers.length === 0) {
-      // fallback fără răspunsuri
-      await supabase
-        .from("game_state")
-        .update({ status: "results" })
-        .eq("session_code", code);
-      return;
-    }
-
-    // scoruri pe echipe
-    const blueScore = answers
-      .filter((a) => a.team === "blue")
-      .reduce((s, a) => s + a.score, 0);
-    const redScore = answers
-      .filter((a) => a.team === "red")
-      .reduce((s, a) => s + a.score, 0);
+    console.log("📊 Showing results...");
+    const { gamingQuestions } = await import("../data/questions");
+    const q = gamingQuestions[currentQuestion];
+    setCorrectAnswer(q.c);
 
     await supabase
       .from("game_state")
       .update({
         status: "results",
-        blue_score: blueScore,
-        red_score: redScore,
+        correct_answer: q.c,
       })
       .eq("session_code", code);
-  }, 2000);
-}
 
+    // 🕓 Calculează scoruri
+    setTimeout(async () => {
+      const { data: answers } = await supabase
+        .from("answers")
+        .select("*")
+        .eq("session_code", code)
+        .eq("question_index", currentQuestion);
 
-  // ⏭️ întrebare următoare sau Pong
+      if (!answers || answers.length === 0) {
+        await supabase
+          .from("game_state")
+          .update({ status: "results" })
+          .eq("session_code", code);
+        return;
+      }
+
+      const blueScore = answers
+        .filter((a) => a.team === "blue")
+        .reduce((s, a) => s + a.score, 0);
+      const redScore = answers
+        .filter((a) => a.team === "red")
+        .reduce((s, a) => s + a.score, 0);
+
+      await supabase
+        .from("game_state")
+        .update({
+          blue_score: blueScore,
+          red_score: redScore,
+        })
+        .eq("session_code", code);
+    }, 1500);
+  }
+
+  // ⏭️ Următoarea întrebare sau Pong
   async function nextQuestion() {
     const { gamingQuestions } = await import("../data/questions");
     if (currentQuestion + 1 >= gamingQuestions.length) {
@@ -185,30 +213,27 @@ export default function BroadcastView() {
     }, 3000);
   }
 
-  // 🎮 UI logic
-  if (status === "countdown")
-  return (
-    <div ref={containerRef}>
-      <CountdownScreen
-        duration={5}
-        label="Get ready... the round is starting!"
-        onFinish={startQuestion}
-      />
-    </div>
-  );
+  // 🎮 UI Logic
+  if (status === "countdown") {
+    console.log("⏳ Showing countdown...");
+    return (
+      <div ref={containerRef}>
+        <CountdownScreen onFinish={startQuestion} />
+      </div>
+    );
+  }
 
-
-  if (status === "quiz")
+  if (status === "quiz") {
+    console.log("🧠 Showing quiz...");
     return (
       <div ref={containerRef}>
         <QuizGame sessionCode={code} isBroadcast onFinish={showResults} />
       </div>
     );
+  }
 
-  if (status === "calculating")
-    return <WaitingScreen message="Calculating team scores..." />;
-
-  if (status === "results")
+  if (status === "results") {
+    console.log("🏁 Showing results...");
     return (
       <div ref={containerRef}>
         <ResultsScreen
@@ -221,14 +246,23 @@ export default function BroadcastView() {
         />
       </div>
     );
+  }
 
-  if (status === "intermission")
-    return <CountdownScreen duration={5} label="Next round starting in..." onFinish={startQuestion} />;
+  if (status === "intermission") {
+    return (
+      <CountdownScreen
+        duration={5}
+        label="Next round starting..."
+        onFinish={startQuestion}
+      />
+    );
+  }
 
-  if (status === "pong")
+  if (status === "pong") {
     return <PongGame sessionCode={code} />;
+  }
 
-  // 🕓 ecran inițial
+  // 🕓 Ecran inițial
   return (
     <div
       ref={containerRef}
@@ -236,7 +270,10 @@ export default function BroadcastView() {
     >
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,0,255,0.1),transparent_70%)] animate-pulse"></div>
 
-      <QRCodeCanvas value={`https://minimadness.vercel.app/join/${code}`} size={260} />
+      <QRCodeCanvas
+        value={`https://minimadness.vercel.app/join/${code}`}
+        size={260}
+      />
       <h1 className="mt-6 text-4xl font-extrabold text-pink-400">
         Session Code: <span className="text-white">{code}</span>
       </h1>
@@ -252,7 +289,9 @@ export default function BroadcastView() {
         </div>
       </div>
 
-      <p className="mt-4 text-gray-400">Waiting for players and start signal...</p>
+      <p className="mt-4 text-gray-400">
+        Waiting for players and start signal...
+      </p>
     </div>
   );
 }
