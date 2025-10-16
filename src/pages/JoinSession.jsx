@@ -6,155 +6,93 @@ export default function JoinSession() {
   const { code } = useParams();
   const [name, setName] = useState("");
   const [joined, setJoined] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
+  const [timeLeft, setTimeLeft] = useState(0);
 
   async function joinSession() {
-    setLoading(true);
+    const { data: session } = await supabase.from("sessions").select("*").eq("code", code).single();
+    if (!session) return alert("Session not found!");
 
-    const { data: session, error: sessionError } = await supabase
-      .from("sessions")
-      .select("*")
-      .eq("code", code.toUpperCase())
-      .single();
-
-    if (sessionError || !session) {
-      alert("Session not found!");
-      setLoading(false);
-      return;
-    }
-
-    const { error } = await supabase
-      .from("players")
-      .insert([{ session_code: code.toUpperCase(), name }]);
-
-    setLoading(false);
-
-    if (error) {
-      alert("Error joining session!");
-      console.error(error);
-      return;
-    }
-
+    await supabase.from("players").insert([{ session_code: code, name, score: 0 }]);
     setJoined(true);
   }
 
-  // ascultă modificările de stare a jocului
+  // ascultă schimbări la game_state
   useEffect(() => {
-    if (!code) return;
-
+    if (!joined) return;
     const channel = supabase
       .channel("game-state")
       .on(
         "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "game_state",
-          filter: `session_code=eq.${code.toUpperCase()}`,
-        },
+        { event: "UPDATE", schema: "public", table: "game_state", filter: `session_code=eq.${code}` },
         (payload) => {
-          const newState = payload.new;
-          if (newState.status === "started") {
-            setQuestion(newState.question);
-          }
+          const newQ = payload.new.question;
+          setQuestion(newQ);
+          setTimeLeft(15);
         }
       )
       .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [joined]);
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [code]);
+  // timer local
+  useEffect(() => {
+    if (!question) return;
+    const timer = setInterval(() => setTimeLeft((t) => Math.max(0, t - 1)), 1000);
+    return () => clearInterval(timer);
+  }, [question]);
 
-  // trimitere răspuns
   async function submitAnswer() {
-    const { error } = await supabase
-      .from("answers")
-      .insert([
-        {
-          session_code: code.toUpperCase(),
-          answer,
-          is_correct: answer.trim() === "4", // test simplu
-        },
-      ]);
-
-    if (error) {
-      alert("Error submitting answer");
-      console.error(error);
-    } else {
-      alert("✅ Answer submitted!");
-      setQuestion(null);
-      setAnswer("");
-    }
+    if (!answer) return;
+    await supabase.from("answers").insert([{ session_code: code, player_name: name, answer }]);
+    setAnswer("");
   }
 
-  // 🟢 Dacă jucătorul a intrat și jocul a început -> afișează întrebarea
-  if (joined && question) {
+  if (!joined)
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen text-center">
-        <h2 className="text-3xl font-bold text-pink-400 mb-6 flex items-center">
-          🧠 <span className="ml-2">Question:</span>
-        </h2>
-        <p className="text-2xl font-semibold mb-8 text-white">{question}</p>
-
+      <div className="flex flex-col items-center justify-center min-h-screen bg-[#0B0015] text-white">
+        <h1 className="text-3xl mb-6 text-pink-400">Join MiniMadness</h1>
         <input
-          type="text"
-          value={answer}
-          onChange={(e) => setAnswer(e.target.value)}
-          placeholder="Your answer..."
-          className="border-2 border-pink-400 rounded-lg p-3 text-lg text-center mb-4 
-                     bg-white text-black focus:ring-2 focus:ring-pink-500 focus:outline-none"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Enter your name"
+          className="px-4 py-2 rounded text-black mb-4"
         />
-
         <button
-          onClick={submitAnswer}
-          disabled={!answer}
-          className="px-8 py-3 bg-pink-500 text-white rounded-lg text-lg hover:bg-pink-600"
+          onClick={joinSession}
+          className="bg-pink-600 px-6 py-2 rounded hover:bg-pink-700"
+          disabled={!name}
         >
-          Submit
+          Join
         </button>
       </div>
     );
-  }
 
-  // 🟠 Dacă s-a alăturat dar jocul nu a început încă
-  if (joined) {
+  if (!question)
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen text-center">
-        <h2 className="text-3xl font-bold text-green-500">✅ Joined!</h2>
-        <p className="mt-4 text-lg text-white">
-          Welcome, <b>{name}</b> 👋
-        </p>
-        <p className="mt-2 text-gray-400">Waiting for the host to start...</p>
+      <div className="flex items-center justify-center min-h-screen text-white bg-[#0B0015]">
+        Waiting for host to start...
       </div>
     );
-  }
 
-  // 🔵 Formularul de join
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen">
-      <h1 className="text-4xl font-bold text-pink-400 mb-8">Join MiniMadness 🕹️</h1>
-
+    <div className="flex flex-col items-center justify-center min-h-screen bg-[#0B0015] text-white">
+      <h2 className="text-2xl text-pink-400 mb-4">🧠 Question:</h2>
+      <p className="text-xl mb-4">{question}</p>
+      <p className="text-yellow-400 mb-2">⏳ {timeLeft}s</p>
       <input
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder="Enter your name"
-        className="border-2 border-gray-300 rounded-lg p-3 text-lg text-center mb-4 
-                   bg-white text-black focus:outline-none focus:ring-2 focus:ring-pink-500"
+        value={answer}
+        onChange={(e) => setAnswer(e.target.value)}
+        className="px-4 py-2 rounded text-black mb-3"
+        placeholder="Your answer..."
       />
-
       <button
-        onClick={joinSession}
-        disabled={loading || !name}
-        className={`px-8 py-4 text-lg rounded-xl transition ${
-          loading
-            ? "bg-gray-400 text-dark"
-            : "bg-pink-500 text-white hover:bg-pink-600"
-        }`}
+        onClick={submitAnswer}
+        disabled={!answer || timeLeft === 0}
+        className="bg-pink-600 px-6 py-2 rounded hover:bg-pink-700"
       >
-        {loading ? "Joining..." : "Join"}
+        Submit
       </button>
     </div>
   );
