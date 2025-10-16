@@ -5,95 +5,79 @@ import { supabase } from "../supabaseClient";
 export default function JoinSession() {
   const { code } = useParams();
   const [name, setName] = useState("");
+  const [team, setTeam] = useState("");
   const [joined, setJoined] = useState(false);
-  const [question, setQuestion] = useState("");
-  const [answer, setAnswer] = useState("");
-  const [timeLeft, setTimeLeft] = useState(0);
 
-  async function joinSession() {
+  async function join(teamChoice) {
     const { data: session } = await supabase.from("sessions").select("*").eq("code", code).single();
     if (!session) return alert("Session not found!");
-
-    await supabase.from("players").insert([{ session_code: code, name, score: 0 }]);
+    await supabase.from("players").insert([{ name, team: teamChoice, session_code: code }]);
+    setTeam(teamChoice);
     setJoined(true);
   }
 
-  // ascultă schimbări la game_state
-  useEffect(() => {
+  async function movePaddle(direction) {
     if (!joined) return;
-    const channel = supabase
-      .channel("game-state")
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "game_state", filter: `session_code=eq.${code}` },
-        (payload) => {
-          const newQ = payload.new.question;
-          setQuestion(newQ);
-          setTimeLeft(15);
-        }
-      )
-      .subscribe();
-    return () => supabase.removeChannel(channel);
-  }, [joined]);
-
-  // timer local
-  useEffect(() => {
-    if (!question) return;
-    const timer = setInterval(() => setTimeLeft((t) => Math.max(0, t - 1)), 1000);
-    return () => clearInterval(timer);
-  }, [question]);
-
-  async function submitAnswer() {
-    if (!answer) return;
-    await supabase.from("answers").insert([{ session_code: code, player_name: name, answer }]);
-    setAnswer("");
+    await supabase
+      .from("players")
+      .update({
+        paddle_y: direction === "up" ? supabase.rpc("decrease_paddle_y") : supabase.rpc("increase_paddle_y"),
+      })
+      .eq("session_code", code)
+      .eq("team", team);
   }
 
   if (!joined)
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-[#0B0015] text-white">
-        <h1 className="text-3xl mb-6 text-pink-400">Join MiniMadness</h1>
+        <h1 className="text-3xl mb-4 text-pink-400">Join Pong Battle</h1>
         <input
+          type="text"
+          placeholder="Your name"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Enter your name"
           className="px-4 py-2 rounded text-black mb-4"
         />
-        <button
-          onClick={joinSession}
-          className="bg-pink-600 px-6 py-2 rounded hover:bg-pink-700"
-          disabled={!name}
-        >
-          Join
-        </button>
-      </div>
-    );
-
-  if (!question)
-    return (
-      <div className="flex items-center justify-center min-h-screen text-white bg-[#0B0015]">
-        Waiting for host to start...
+        <div className="flex gap-4">
+          <button
+            onClick={() => join("blue")}
+            disabled={!name}
+            className="px-6 py-3 bg-blue-600 rounded"
+          >
+            Join Blue
+          </button>
+          <button
+            onClick={() => join("red")}
+            disabled={!name}
+            className="px-6 py-3 bg-red-600 rounded"
+          >
+            Join Red
+          </button>
+        </div>
       </div>
     );
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-[#0B0015] text-white">
-      <h2 className="text-2xl text-pink-400 mb-4">🧠 Question:</h2>
-      <p className="text-xl mb-4">{question}</p>
-      <p className="text-yellow-400 mb-2">⏳ {timeLeft}s</p>
-      <input
-        value={answer}
-        onChange={(e) => setAnswer(e.target.value)}
-        className="px-4 py-2 rounded text-black mb-3"
-        placeholder="Your answer..."
-      />
-      <button
-        onClick={submitAnswer}
-        disabled={!answer || timeLeft === 0}
-        className="bg-pink-600 px-6 py-2 rounded hover:bg-pink-700"
-      >
-        Submit
-      </button>
+    <div
+      className={`flex flex-col items-center justify-center min-h-screen ${
+        team === "blue" ? "bg-blue-900" : "bg-red-900"
+      }`}
+    >
+      <h2 className="text-white text-2xl mb-6">Control your paddle</h2>
+      <div className="flex flex-col gap-4">
+        <button
+          onClick={() => movePaddle("up")}
+          className="bg-white text-black px-12 py-8 rounded-lg active:scale-95"
+        >
+          ▲
+        </button>
+        <button
+          onClick={() => movePaddle("down")}
+          className="bg-white text-black px-12 py-8 rounded-lg active:scale-95"
+        >
+          ▼
+        </button>
+      </div>
     </div>
   );
 }
