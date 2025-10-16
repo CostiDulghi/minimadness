@@ -146,26 +146,35 @@ export default function JoinSession() {
   }
 
   // status-based rendering
-  if (status === "countdown") return <CountdownScreen onFinish={() => {}} />;
+// status-based rendering
+if (status === "countdown")
+  return <CountdownScreen onFinish={() => {}} />;
 
-  if (status === "quiz")
-    return <QuizGame sessionCode={code} playerName={name} team={team} onFinish={() => {}} />;
+if (status === "quiz")
+  return (
+    <QuizGame
+      sessionCode={code}
+      playerName={name}
+      team={team}
+      onFinish={() => {}}
+    />
+  );
 
-  if (status === "results" && joined)
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-[#0b0015] via-[#160028] to-[#0b0015] text-white text-center">
-        <h2 className="text-4xl text-pink-400 font-extrabold mb-4">Results</h2>
-        if (status === "results") {
-  return <WaitingScreen message="Watch the big screen for the answer & scores..." />;
-}
-
-        <p className="mt-8 text-gray-400 animate-pulse">Next round starting...</p>
-      </div>
-    );
+if (status === "results" && joined)
+  return (
+    <WaitingScreen message="Watch the big screen for the answer & scores..." />
+  );
 
   if (status === "pong") return <PongGame sessionCode={code} />;
 
-  if (status === "calculating") return <WaitingScreen message="Calculating scores..." />;
+  // default waiting screen
+return (
+  <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-[#0b0015] via-[#160028] to-[#0b0015] text-white text-center">
+    <h2 className="text-4xl text-pink-400 font-extrabold mb-4">Waiting...</h2>
+    <p className="mt-4 text-gray-400 animate-pulse">Waiting for game to start...</p>
+  </div>
+);
+
 
   // join screen
   return (
