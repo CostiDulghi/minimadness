@@ -138,7 +138,14 @@ export default function JoinSession() {
   }
 
   // ⚡️ Switch logic - sincronizat complet cu Broadcast
-  if (status === "countdown") return <WaitingScreen message="Get ready... the round is starting!" />;
+  if (status === "countdown")
+  return (
+    <CountdownScreen
+      duration={5}
+      label="Get ready... the round is starting!"
+    />
+  );
+
   if (status === "quiz") return <QuizGame sessionCode={code} playerName={name} team={team} />;
   if (status === "calculating" || status === "results")
     return <WaitingScreen message="Calculating scores..." />;

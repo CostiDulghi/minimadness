@@ -173,19 +173,27 @@ export default function HostSession() {
         </button>
 
         <button
-          onClick={async () => {
-            const { error } = await supabase
-              .from("game_state")
-              .update({ status: "countdown", join_locked: true })
-              .eq("session_code", sessionCode);
-            if (error) alert("Error starting game");
-          }}
-          className="flex items-center gap-2 px-8 py-3 text-lg font-semibold rounded-xl text-white 
-                     bg-gradient-to-r from-pink-500 to-red-500 shadow-[0_0_20px_rgba(255,0,100,0.4)]
-                     hover:shadow-[0_0_30px_rgba(255,0,100,0.7)] hover:scale-105 transition-all duration-300"
-        >
-          <PlayCircle className="w-5 h-5" /> Start Game
-        </button>
+  onClick={async () => {
+    const deadline = new Date(Date.now() + 5000).toISOString(); // countdown 5s
+    const { error } = await supabase
+      .from("game_state")
+      .update({
+        status: "countdown",
+        current_question: 0,
+        join_locked: true,
+        question_deadline: deadline,
+      })
+      .eq("session_code", sessionCode);
+
+    if (error) alert("Error starting game");
+  }}
+  className="flex items-center gap-2 px-8 py-3 text-lg font-semibold rounded-xl text-white 
+             bg-gradient-to-r from-pink-500 to-red-500 shadow-[0_0_20px_rgba(255,0,100,0.4)]
+             hover:shadow-[0_0_30px_rgba(255,0,100,0.7)] hover:scale-105 transition-all duration-300"
+>
+  <PlayCircle className="w-5 h-5" /> Start Game
+</button>
+
       </div>
     </div>
   );
