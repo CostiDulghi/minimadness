@@ -8,40 +8,27 @@ export default function CountdownScreen({ onFinish }) {
   const flashRef = useRef();
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      setCount((prev) => {
-        if (prev === 1) {
-          clearInterval(timer);
+  const timer = setInterval(() => {
+    setCount((prev) => {
+      if (prev === 1) {
+        clearInterval(timer);
+        gsap.to(countRef.current, {
+          scale: 3,
+          opacity: 0,
+          duration: 0.6,
+          onComplete: () => {
+            if (onFinish) onFinish(); // doar la final
+          },
+        });
+        return 0;
+      }
+      return prev - 1;
+    });
+  }, 1000);
 
-          // animație de ieșire + flash
-          gsap.to(countRef.current, {
-            scale: 3,
-            opacity: 0,
-            duration: 0.7,
-            ease: "power2.in",
-          });
-          gsap.to(flashRef.current, {
-            opacity: 1,
-            duration: 0.3,
-            delay: 0.4,
-            ease: "power1.inOut",
-            onComplete: () => {
-              gsap.to(flashRef.current, {
-                opacity: 0,
-                duration: 0.5,
-                onComplete: onFinish,
-              });
-            },
-          });
+  return () => clearInterval(timer);
+}, [onFinish]);
 
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [onFinish]);
 
   useEffect(() => {
     if (count > 0) {

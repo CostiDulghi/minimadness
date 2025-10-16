@@ -2,36 +2,51 @@ import { useState } from "react";
 import { gamingQuestions } from "../data/questions";
 
 export default function QuizGame({ onFinish, sessionCode }) {
+  // 🧩 asigurare că avem format corect (compatibil cu structura ta q/a/c)
+  const questions = Array.isArray(gamingQuestions) && gamingQuestions.length > 0
+    ? gamingQuestions.map((q) => ({
+        question: q.q,
+        options: q.a,
+        answer: q.c,
+      }))
+    : [
+        {
+          question: "Which company created the PlayStation console?",
+          options: ["Sega", "Sony", "Nintendo", "Microsoft"],
+          answer: "Sony",
+        },
+      ];
+
   const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState("");
-
-  // ✅ Protecție: dacă nu există întrebări
-  if (!gamingQuestions || gamingQuestions.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-black text-white">
-        <p className="text-xl">No questions loaded 🧐</p>
-      </div>
-    );
-  }
-
-  const question = gamingQuestions[index];
+  const question = questions[index] || null;
 
   const handleAnswer = (option) => {
     setSelected(option);
     setTimeout(() => {
-      if (index + 1 < gamingQuestions.length) {
+      if (index + 1 < questions.length) {
         setIndex(index + 1);
         setSelected("");
       } else {
-        onFinish();
+        onFinish?.(); // final de quiz
       }
     }, 1000);
   };
 
+  if (!question)
+    return (
+      <div className="flex items-center justify-center min-h-screen text-white bg-black">
+        <p>No questions available!</p>
+      </div>
+    );
+
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-[#0b0015] via-[#160028] to-[#0b0015] text-white">
-      <h2 className="text-3xl text-pink-400 mb-6">{question.question}</h2>
-      <div className="grid grid-cols-2 gap-4 w-[60%]">
+      <h2 className="text-3xl text-pink-400 mb-6 text-center">
+        {question.question}
+      </h2>
+
+      <div className="grid grid-cols-2 gap-4 w-[80%] max-w-3xl">
         {question.options.map((opt) => (
           <button
             key={opt}
@@ -48,8 +63,9 @@ export default function QuizGame({ onFinish, sessionCode }) {
           </button>
         ))}
       </div>
+
       <p className="mt-6 text-gray-400 text-sm">
-        Question {index + 1} of {gamingQuestions.length}
+        Question {index + 1} of {questions.length}
       </p>
     </div>
   );
