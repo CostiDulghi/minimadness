@@ -88,43 +88,67 @@ export default function HostSession() {
 
   // 🟣 UI după creare
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-[#12002e] via-[#0a001a] to-[#12002e] text-white text-center">
-      <QRCodeCanvas
-        value={`https://minimadness.vercel.app/join/${sessionCode}`}
-        size={220}
-      />
-      <p className="mt-6 text-lg">
-        Session Code: <b className="text-pink-400">{sessionCode}</b>
-      </p>
+  <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-[#12002e] via-[#0a001a] to-[#12002e] text-white text-center">
+    <QRCodeCanvas
+      value={`https://minimadness.vercel.app/join/${sessionCode}`}
+      size={220}
+    />
+    <p className="mt-6 text-lg">
+      Session Code: <b className="text-pink-400">{sessionCode}</b>
+    </p>
 
-      <div className="mt-8">
-        <h3 className="text-2xl text-pink-400 mb-4">Players Joined:</h3>
-        <div className="flex gap-16 justify-center">
-          <div>
-            <h4 className="text-blue-400 font-semibold mb-2">Team Blue</h4>
-            <ul>
-              {players
-                .filter((p) => p.team === "blue")
-                .map((p) => (
-                  <li key={p.id}>{p.name}</li>
-                ))}
-            </ul>
-          </div>
-          <div>
-            <h4 className="text-red-400 font-semibold mb-2">Team Red</h4>
-            <ul>
-              {players
-                .filter((p) => p.team === "red")
-                .map((p) => (
-                  <li key={p.id}>{p.name}</li>
-                ))}
-            </ul>
-          </div>
-        </div>
-        <p className="mt-4 text-gray-400 text-sm">
-          Total players: {players.length}
+    <div className="mt-8">
+      <h3 className="text-2xl text-pink-400 mb-4">Players Joined:</h3>
+      <div className="flex gap-16 justify-center text-lg">
+        <p className="text-blue-400 font-semibold">
+          Team Blue:{" "}
+          <span className="text-white">
+            {players.filter((p) => p.team === "blue").length}
+          </span>
+        </p>
+        <p className="text-red-400 font-semibold">
+          Team Red:{" "}
+          <span className="text-white">
+            {players.filter((p) => p.team === "red").length}
+          </span>
         </p>
       </div>
+      <p className="mt-4 text-gray-400 text-sm">
+        Total players: {players.length}
+      </p>
     </div>
-  );
+
+    {/* Butoane de control */}
+<div className="mt-10 flex gap-8 justify-center">
+  <button
+    onClick={() =>
+      window.open(`/broadcast/${sessionCode}`, "_blank", "noopener,noreferrer")
+    }
+    className="flex items-center gap-2 px-8 py-3 text-lg font-semibold rounded-xl text-white 
+               bg-gradient-to-r from-purple-600 to-pink-500 
+               shadow-lg hover:shadow-pink-500/50 hover:scale-105 transition-all"
+  >
+    🎥 <span>Open Broadcast</span>
+  </button>
+
+  <button
+  onClick={async () => {
+    const { error } = await supabase
+      .from("game_state")
+      .update({ status: "countdown", join_locked: true })
+      .eq("session_code", sessionCode);
+
+    if (error) alert("Error starting game");
+    else console.log("✅ Game started — countdown triggered");
+  }}
+  className="flex items-center gap-2 px-8 py-3 text-lg font-semibold rounded-xl text-white 
+             bg-gradient-to-r from-pink-500 to-red-500 
+             shadow-lg hover:shadow-red-500/50 hover:scale-105 transition-all"
+>
+  ▶️ <span>Start Game</span>
+</button>
+
+</div>
+</div>
+);
 }

@@ -1,22 +1,27 @@
-import { useState } from "react";
-import { useParams } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import { Gamepad2 } from "lucide-react";
 
 export default function JoinSession() {
   const { code } = useParams();
+  const navigate = useNavigate();
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
   const [joined, setJoined] = useState(false);
 
+  // 🔹 Funcție pentru a intra într-o echipă
   async function join(team) {
     if (joined) return;
     setLoading(true);
 
+    const sessionCode = code?.toUpperCase();
+
+    // verifică dacă sesiunea există
     const { data: session, error: sessionError } = await supabase
       .from("sessions")
       .select("*")
-      .eq("code", code?.toUpperCase())
+      .eq("code", sessionCode)
       .single();
 
     if (sessionError || !session) {
@@ -25,11 +30,12 @@ export default function JoinSession() {
       return;
     }
 
+    // verifică dacă numele e deja folosit în acea sesiune
     const { data: existing } = await supabase
       .from("players")
       .select("*")
       .eq("name", name)
-      .eq("session_code", code?.toUpperCase());
+      .eq("session_code", sessionCode);
 
     if (existing && existing.length > 0) {
       setJoined(true);
@@ -37,26 +43,68 @@ export default function JoinSession() {
       return;
     }
 
+    // inserează playerul
     const { error } = await supabase
       .from("players")
-      .insert([{ name, team, session_code: code?.toUpperCase() }]);
+      .insert([{ name, team, session_code: sessionCode }]);
 
     if (error) {
       console.error(error);
       alert("Error joining session");
     } else {
       setJoined(true);
+      localStorage.setItem("mm_name", name);
+      localStorage.setItem("mm_team", team);
     }
     setLoading(false);
   }
 
+  // 🔄 Ascultă statusul jocului (live din Supabase)
+  useEffect(() => {
+    if (!code) return;
+
+    const channel = supabase
+      .channel(`game-${code}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "game_state",
+          filter: `session_code=eq.${code}`,
+        },
+        (payload) => {
+          const newStatus = payload.new.status;
+          console.log("📡 Game state for player:", newStatus);
+
+          // dacă hostul dă start, trece la countdown
+          if (newStatus === "countdown") {
+            navigate(`/countdown/${code}`);
+          }
+        }
+      )
+      .subscribe();
+
+    // verificare inițială (în caz că playerul intră după start)
+    (async () => {
+      const { data } = await supabase
+        .from("game_state")
+        .select("status")
+        .eq("session_code", code)
+        .single();
+
+      if (data?.status === "countdown") navigate(`/countdown/${code}`);
+    })();
+
+    return () => supabase.removeChannel(channel);
+  }, [code, navigate]);
+
+  // 🔹 UI pentru player
   if (joined) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen text-white bg-gradient-to-br from-[#12002e] via-[#0a001a] to-[#12002e]">
         <h2 className="text-3xl font-bold text-pink-400">✅ Joined!</h2>
-        <p className="mt-4 text-gray-300">
-          Waiting for the game to start...
-        </p>
+        <p className="mt-4 text-gray-300">Waiting for the game to start...</p>
       </div>
     );
   }

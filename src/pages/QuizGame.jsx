@@ -4,6 +4,16 @@ import { gamingQuestions } from "../data/questions";
 export default function QuizGame({ onFinish, sessionCode }) {
   const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState("");
+
+  // ✅ Protecție: dacă nu există întrebări
+  if (!gamingQuestions || gamingQuestions.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-black text-white">
+        <p className="text-xl">No questions loaded 🧐</p>
+      </div>
+    );
+  }
+
   const question = gamingQuestions[index];
 
   const handleAnswer = (option) => {
